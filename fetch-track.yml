@@ -1,0 +1,42 @@
+name: Fetch Alabare track
+
+on:
+  schedule:
+    # Every 15 minutes. GitHub schedules are best-effort, often run 5–10 min late.
+    - cron: '*/15 * * * *'
+  workflow_dispatch:  # Allow manual trigger from the Actions tab
+
+permissions:
+  contents: write  # Needed to commit the updated track.json
+
+concurrency:
+  group: fetch-track
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Fetch Garmin data
+        run: node scripts/fetch-track.mjs
+
+      - name: Commit if changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/track.json
+          # Only commit if something actually changed (ignore timestamp-only churn? no — we want each fetch)
+          if git diff --staged --quiet; then
+            echo "No changes."
+          else
+            git commit -m "Update track data: $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git push
+          fi
