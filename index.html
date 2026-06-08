@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alabare — Atlantic Crossing 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --ink: #0f1117;
+    --paper: #f5f2ec;
+    --sea: #1a3a5c;
+    --sea-light: #2d6a9f;
+    --accent: #e8630a;
+    --muted: #8a8880;
+    --rule: rgba(15,17,23,0.1);
+    --card-bg: rgba(255,255,255,0.7);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Mono', monospace;
+    background: var(--paper);
+    color: var(--ink);
+    min-height: 100vh;
+    font-size: 13px;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  header {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    padding: 2.5rem 3rem 1.5rem;
+    border-bottom: 1px solid var(--rule);
+    animation: fadeUp 0.6s ease both;
+  }
+
+  .title-block h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(2.2rem, 4vw, 3.5rem);
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+  .title-block h1 em { font-style: italic; color: var(--sea-light); }
+  .title-block .subtitle {
+    margin-top: 0.4rem;
+    color: var(--muted);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .live-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    animation: fadeUp 0.6s 0.1s ease both;
+  }
+  .live-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 0 3px rgba(34,197,94,0.2);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(34,197,94,0.2); }
+    50% { box-shadow: 0 0 0 6px rgba(34,197,94,0.05); }
+  }
+
+  .stat-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border-bottom: 1px solid var(--rule);
+    animation: fadeUp 0.6s 0.15s ease both;
+  }
+  .stat { padding: 1.4rem 3rem; border-right: 1px solid var(--rule); }
+  .stat:last-child { border-right: none; }
+  .stat-label {
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.4rem;
+  }
+  .stat-value {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.9rem;
+    line-height: 1;
+  }
+  .stat-unit {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    margin-left: 0.2rem;
+  }
+  .stat-sub { font-size: 10px; color: var(--muted); margin-top: 0.3rem; }
+
+  .main {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    height: calc(100vh - 200px);
+    min-height: 480px;
+    animation: fadeUp 0.6s 0.25s ease both;
+  }
+
+  #map { width: 100%; height: 100%; background: #d4e3f0; }
+  .leaflet-tile-pane { filter: saturate(0.6) brightness(0.95); }
+
+  .sidebar {
+    border-left: 1px solid var(--rule);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sidebar-section { padding: 1.5rem; border-bottom: 1px solid var(--rule); }
+  .sidebar-section h3 {
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 1rem;
+  }
+
+  .wind-block { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+  .wind-item {
+    background: var(--card-bg);
+    border: 1px solid var(--rule);
+    padding: 0.8rem;
+    border-radius: 2px;
+  }
+  .wind-item .label { font-size: 10px; color: var(--muted); margin-bottom: 0.2rem; }
+  .wind-item .value { font-family: 'DM Serif Display', serif; font-size: 1.3rem; }
+  .wind-arrow {
+    display: inline-block;
+    font-size: 1.3rem;
+    transition: transform 0.5s ease;
+    transform-origin: center;
+  }
+
+  .log-entry {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 0.8rem;
+    align-items: center;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--rule);
+    font-size: 11px;
+  }
+  .log-entry:last-child { border-bottom: none; }
+  .log-date { color: var(--muted); white-space: nowrap; }
+  .log-dist { color: var(--accent); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+  .progress-track {
+    margin-top: 0.5rem;
+    height: 3px;
+    background: var(--rule);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--sea-light), var(--accent));
+    transition: width 1s ease;
+  }
+  .progress-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 0.4rem;
+  }
+
+  .route-pills { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem; }
+  .pill {
+    padding: 0.2rem 0.6rem;
+    border: 1px solid var(--rule);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    background: var(--card-bg);
+    border-radius: 1px;
+  }
+  .pill.active { border-color: var(--sea-light); color: var(--sea-light); }
+  .pill.future { color: var(--muted); }
+
+  footer {
+    padding: 1rem 3rem;
+    border-top: 1px solid var(--rule);
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+  }
+
+  .loading-state {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--muted);
+    font-size: 11px;
+    padding: 1rem 0;
+  }
+  .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid var(--rule);
+    border-top-color: var(--sea-light);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .no-data { color: var(--muted); font-size: 11px; font-style: italic; }
+
+  .garmin-note {
+    font-size: 10px;
+    color: var(--muted);
+    padding: 0.8rem 1.5rem;
+    border-bottom: 1px solid var(--rule);
+    line-height: 1.6;
+  }
+  .garmin-note a { color: var(--sea-light); text-decoration: none; }
+  .garmin-note a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-block">
+    <h1><em>Alabare</em> — Atlantic Crossing</h1>
+    <p class="subtitle">Massachusetts → Azores / Portugal &nbsp;·&nbsp; June 2026</p>
+  </div>
+  <div class="live-badge">
+    <span class="live-dot"></span>
+    <span>Live tracking</span>
+  </div>
+</header>
+
+<div class="stat-bar">
+  <div class="stat">
+    <div class="stat-label">Distance sailed</div>
+    <div class="stat-value" id="stat-dist">—<span class="stat-unit">nm</span></div>
+    <div class="stat-sub" id="stat-dist-sub">loading…</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Distance to Azores</div>
+    <div class="stat-value" id="stat-remaining">—<span class="stat-unit">nm</span></div>
+    <div class="stat-sub" id="stat-eta">ETA unknown</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Today's run</div>
+    <div class="stat-value" id="stat-today">—<span class="stat-unit">nm</span></div>
+    <div class="stat-sub" id="stat-avg">avg/day —</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Current position</div>
+    <div class="stat-value" id="stat-lat" style="font-size:1.3rem">—</div>
+    <div class="stat-sub" id="stat-lon">—</div>
+  </div>
+</div>
+
+<div class="main">
+  <div id="map"></div>
+  <div class="sidebar">
+
+    <div class="garmin-note">
+      GPS via <a href="https://live.garmin.com/session/6136f821-fc91-8386-bf3d-1c1b68861401/token/7260862AE7501F8119512C387685DFC" target="_blank">Garmin LiveTrack ↗</a>.
+      Updated server-side every 10 min. Wind from Open-Meteo at boat's current position.
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Route</h3>
+      <div class="route-pills">
+        <div class="pill active">Massachusetts</div>
+        <div class="pill active">→ At sea</div>
+        <div class="pill future">Azores</div>
+        <div class="pill future">Portugal / Spain</div>
+      </div>
+      <div style="margin-top:1rem">
+        <div class="progress-track"><div class="progress-fill" id="prog-fill" style="width:0%"></div></div>
+        <div class="progress-label"><span>Start</span><span id="prog-pct">0%</span><span>Azores</span></div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Wind &amp; sea at boat</h3>
+      <div id="wind-loading" class="loading-state"><div class="spinner"></div> fetching…</div>
+      <div class="wind-block" id="wind-block" style="display:none">
+        <div class="wind-item">
+          <div class="label">Wind speed</div>
+          <div class="value" id="wind-speed">—</div>
+          <div class="label">knots</div>
+        </div>
+        <div class="wind-item">
+          <div class="label">Wind from</div>
+          <div class="value"><span class="wind-arrow" id="wind-arrow">↑</span></div>
+          <div class="label" id="wind-dir-label">—</div>
+        </div>
+        <div class="wind-item">
+          <div class="label">Wave height</div>
+          <div class="value" id="wave-h">—</div>
+          <div class="label">m</div>
+        </div>
+        <div class="wind-item">
+          <div class="label">Wave period</div>
+          <div class="value" id="wave-p">—</div>
+          <div class="label">s</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section" style="flex:1">
+      <h3>Daily log</h3>
+      <div id="log-loading" class="loading-state"><div class="spinner"></div> loading…</div>
+      <div id="daily-log"></div>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  <span>Alabare · Atlantic Crossing 2026</span>
+  <span id="last-updated">—</span>
+</footer>
+
+<script>
+// ─── CONFIG ─────────────────────────────────────────────────────────────────
+const TRACK_JSON_URL = './data/track.json';
+const REFRESH_MS     = 5 * 60 * 1000;  // poll local JSON every 5 min
+const AZORES = { lat: 38.53, lon: -28.63, name: 'Azores' };
+const START  = { lat: 41.636, lon: -70.907, name: 'Fairhaven, MA' };
+
+// ─── MAP SETUP ──────────────────────────────────────────────────────────────
+const map = L.map('map', { zoomControl: false, attributionControl: false });
+L.control.zoom({ position: 'bottomleft' }).addTo(map);
+L.control.attribution({ position: 'bottomright', prefix: '' }).addTo(map);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '© OpenStreetMap, © CARTO',
+  maxZoom: 14
+}).addTo(map);
+map.setView([40, -40], 4);
+
+const boatIcon = L.divIcon({
+  html: `<div style="width:14px;height:14px;background:#e8630a;border:2px solid white;border-radius:50%;box-shadow:0 0 0 4px rgba(232,99,10,0.25)"></div>`,
+  iconSize: [14,14], iconAnchor: [7,7], className: ''
+});
+
+L.circleMarker([START.lat, START.lon], {
+  radius: 5, color: '#1a3a5c', fillColor: '#1a3a5c', fillOpacity: 1, weight: 2
+}).addTo(map).bindTooltip(START.name + ' (start)');
+
+L.circleMarker([AZORES.lat, AZORES.lon], {
+  radius: 5, color: '#2d6a9f', fillColor: '#f5f2ec', fillOpacity: 1, weight: 2
+}).addTo(map).bindTooltip(AZORES.name);
+
+const trackLine = L.polyline([], { color: '#1a3a5c', weight: 2.5, opacity: 0.85 }).addTo(map);
+const projectedLine = L.polyline([], { color: '#2d6a9f', weight: 1.5, opacity: 0.4, dashArray: '6 6' }).addTo(map);
+let boatMarker = null;
+
+// ─── UTILS ──────────────────────────────────────────────────────────────────
+function haversineNm(lat1, lon1, lat2, lon2) {
+  const R = 3440.065;
+  const dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.asin(Math.sqrt(a));
+}
+function fmtCoord(deg, pos, neg) {
+  return `${Math.abs(deg).toFixed(4)}° ${deg >= 0 ? pos : neg}`;
+}
+function degToCompass(deg) {
+  const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return dirs[Math.round(deg/22.5) % 16];
+}
+function formatDate(iso) {
+  return new Date(iso).toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+}
+function setEl(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+
+// ─── LOAD TRACK FROM LOCAL JSON ─────────────────────────────────────────────
+async function loadTrack() {
+  try {
+    const res = await fetch(TRACK_JSON_URL + '?t=' + Date.now());
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return await res.json();
+  } catch (e) {
+    console.warn('Could not load track.json:', e.message);
+    return null;
+  }
+}
+
+// ─── WIND FROM OPEN-METEO (browser-side, CORS-friendly) ─────────────────────
+async function fetchWind(lat, lon) {
+  const atmUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=wind_speed_10m,wind_direction_10m&wind_speed_unit=kn`;
+  const marineUrl = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}&current=wave_height,wave_period`;
+  const [atmRes, marineRes] = await Promise.allSettled([
+    fetch(atmUrl).then(r => r.json()),
+    fetch(marineUrl).then(r => r.json())
+  ]);
+  return {
+    atm: atmRes.status === 'fulfilled' ? atmRes.value : null,
+    marine: marineRes.status === 'fulfilled' ? marineRes.value : null
+  };
+}
+
+// ─── RENDER ──────────────────────────────────────────────────────────────────
+function renderTrack(track) {
+  document.getElementById('log-loading').style.display = 'none';
+
+  if (!track || !track.points || track.points.length === 0) {
+    setEl('stat-dist-sub', 'No GPS data yet');
+    document.getElementById('daily-log').innerHTML =
+      '<p class="no-data">No track data yet.<br>The first update will appear once Alabare\'s tracker comes online.</p>';
+    return null;
+  }
+
+  const pts = track.points;
+  const latLons = pts.map(p => [p.lat, p.lon]);
+  trackLine.setLatLngs(latLons);
+
+  const latest = pts[pts.length - 1];
+  if (boatMarker) boatMarker.remove();
+  boatMarker = L.marker([latest.lat, latest.lon], { icon: boatIcon })
+    .addTo(map)
+    .bindTooltip(`Alabare · ${formatDate(latest.ts)}`);
+
+  projectedLine.setLatLngs([[latest.lat, latest.lon], [AZORES.lat, AZORES.lon]]);
+
+  if (pts.length > 1) {
+    map.fitBounds(L.featureGroup([trackLine, boatMarker]).getBounds().pad(0.15));
+  } else {
+    map.setView([latest.lat, latest.lon], 6);
+  }
+
+  const totalNm = track.totalNm ?? 0;
+  const todayNm = track.todayNm ?? 0;
+  const avgNm   = track.avgNm   ?? 0;
+  const distToAzores = haversineNm(latest.lat, latest.lon, AZORES.lat, AZORES.lon);
+  const etaDays = avgNm > 0 ? (distToAzores / avgNm).toFixed(1) : null;
+  const fullRoute = haversineNm(START.lat, START.lon, AZORES.lat, AZORES.lon);
+  const pct = Math.min(100, Math.round((totalNm / fullRoute) * 100));
+
+  setEl('stat-dist', totalNm.toLocaleString());
+  setEl('stat-dist-sub', 'since departure');
+  setEl('stat-remaining', Math.round(distToAzores).toLocaleString());
+  setEl('stat-eta', etaDays ? `~${etaDays} days at avg pace` : 'ETA unknown');
+  setEl('stat-today', todayNm);
+  setEl('stat-avg', `avg/day ${avgNm} nm`);
+  setEl('stat-lat', fmtCoord(latest.lat, 'N', 'S'));
+  setEl('stat-lon', fmtCoord(latest.lon, 'E', 'W'));
+
+  document.getElementById('prog-fill').style.width = pct + '%';
+  setEl('prog-pct', pct + '%');
+
+  const logEl = document.getElementById('daily-log');
+  if (!track.daysList || track.daysList.length === 0) {
+    logEl.innerHTML = '<p class="no-data">No daily totals yet.</p>';
+  } else {
+    logEl.innerHTML = [...track.daysList].reverse().map(d => `
+      <div class="log-entry">
+        <span class="log-date">${formatDate(d.date + 'T12:00:00Z')}</span>
+        <span></span>
+        <span class="log-dist">${d.nm} nm</span>
+      </div>`).join('');
+  }
+
+  return latest;
+}
+
+function renderWind(atm, marine) {
+  document.getElementById('wind-loading').style.display = 'none';
+  document.getElementById('wind-block').style.display = 'grid';
+
+  const ws  = atm?.current?.wind_speed_10m ?? null;
+  const wd  = atm?.current?.wind_direction_10m ?? null;
+  const wh  = marine?.current?.wave_height ?? null;
+  const wp  = marine?.current?.wave_period ?? null;
+
+  setEl('wind-speed', ws !== null ? ws.toFixed(1) : '—');
+  if (wd !== null) {
+    setEl('wind-dir-label', degToCompass(wd) + ' (' + Math.round(wd) + '°)');
+    const a = document.getElementById('wind-arrow');
+    // arrow points in the direction the wind is going (= from + 180)
+    a.style.transform = `rotate(${(wd + 180) % 360}deg)`;
+  }
+  setEl('wave-h', wh !== null ? wh.toFixed(1) : '—');
+  setEl('wave-p', wp !== null ? Math.round(wp) : '—');
+}
+
+// ─── MAIN ────────────────────────────────────────────────────────────────────
+async function refresh() {
+  const track = await loadTrack();
+  const latest = renderTrack(track);
+
+  const lat = latest?.lat ?? 42.0;
+  const lon = latest?.lon ?? -50.0;
+  const { atm, marine } = await fetchWind(lat, lon);
+  renderWind(atm, marine);
+
+  const stamp = track?.fetchedAt
+    ? new Date(track.fetchedAt).toLocaleString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })
+    : new Date().toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+  setEl('last-updated', `Data: ${stamp}`);
+}
+
+refresh();
+setInterval(refresh, REFRESH_MS);
+</script>
+</body>
+</html>
